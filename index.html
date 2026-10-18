@@ -577,11 +577,22 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     ];
   };
 
-  const iconChain = host => [
-    `https://icon.horse/icon/${host}`,
-    `https://www.google.com/s2/favicons?domain=${host}&sz=128`,
-    `https://icons.duckduckgo.com/ip3/${host}.ico`
-  ];
+  // 图标降级链：站点自身 favicon 直连优先（由本机浏览器请求，内网服务同样可取到，
+  // 且不依赖任何第三方），再用国内可达的 favicon.im 兜底。
+  // 注意：icon.horse / Google / DuckDuckGo 等海外服务在国内网络下不可达，故不再使用。
+  // 站点为 http 而页面为 https 时跳过直连，避免被混合内容策略拦截。
+  const iconChain = url => {
+    let base = '';
+    try { base = new URL(url).origin; } catch (e) {}
+    const host = hostOf(url);
+    const list = [];
+    const blockedByMixedContent = location.protocol === 'https:' && base.startsWith('http:');
+    if (base && !blockedByMixedContent) {
+      list.push(`${base}/favicon.ico`, `${base}/apple-touch-icon.png`);
+    }
+    if (host) list.push(`https://favicon.im/${host}`);
+    return list;
+  };
 
   function decodeEntities(s) {
     const d = document.createElement('div');
@@ -721,11 +732,11 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     return thumb;
   }
 
-  // 图标三级降级：icon.horse -> Google -> DuckDuckGo -> 首字母底图
+  // 图标降级：直连 favicon.ico -> apple-touch-icon -> favicon.im -> 首字母底图
   function useIcon(thumb, img, site, host) {
     thumb.classList.remove('mode-screenshot', 'mode-custom', 'is-fallback');
     thumb.classList.add('mode-icon');
-    const chain = iconChain(host);
+    const chain = iconChain(site.url);
     let i = 0;
     const step = () => {
       if (i >= chain.length) { thumb.classList.add('is-fallback'); return; }
