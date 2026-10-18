@@ -132,11 +132,13 @@ body{
 .search.has-value .hint{display:none}
 
 /* ---------- grid ---------- */
+/* 弹性行布局：卡片宽度在 196~240px 之间自适应，整行（含不满的最后一行）居中。
+   卡片少时不会挤在左侧留出大片空白，卡片多时自动换行，列数随窗口宽度变化 */
 .grid{
-  display:grid;gap:20px;
-  grid-template-columns:repeat(5,1fr);
-  align-content:start;
+  display:flex;flex-wrap:wrap;gap:20px;
+  justify-content:center;align-content:flex-start;
 }
+.tile-wrap,.add-tile{flex:1 1 196px;max-width:240px}
 .tile-wrap{position:relative;display:block}
 .tile-wrap.hidden{display:none}
 .tile{
@@ -333,15 +335,10 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
 @keyframes toast-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .toast.out{opacity:0;transform:translateY(8px);transition:.3s ease}
 
-@media (max-width:1024px){
-  .grid{grid-template-columns:repeat(4,1fr)}
-}
-@media (max-width:768px){
-  .grid{grid-template-columns:repeat(3,1fr)}
-}
+/* 列数不再写死：由上面的自适应宽度自动决定 */
 @media (max-width:600px){
   .shell{padding:16px 16px 34px}
-  .grid{grid-template-columns:repeat(2,1fr);gap:14px}
+  .grid{gap:14px}
   .top-actions .label{display:none}
 }
 @media (prefers-reduced-motion:reduce){
