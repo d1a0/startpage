@@ -579,18 +579,23 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     ];
   };
 
-  // 图标降级链：只取站点自身的图标，不依赖任何第三方服务。
-  // icon.horse / Google / DuckDuckGo 等海外服务在国内网络下不可达；
-  // favicon.im 对取不到图标的站点会返回它自己的品牌 logo（产生误导），故不使用。
-  // 站点为 http 而页面为 https 时跳过直连，避开混合内容拦截；全部取不到时回落首字母底图。
+  // 图标降级链：先直连站点自身图标，再由 favicon.cccyun.cc 兜底。
+  // 直连路径覆盖静态站点；SPA（任意路径都返回 HTML）以及只在 <link rel=icon>
+  // 里声明图标的站点，交给兜底服务解析页面后取回。
+  // 海外的 icon.horse / Google / DuckDuckGo 在本机网络下不可达；
+  // favicon.im 对取不到图标的站点会返回自己的品牌 logo（产生误导），故不使用。
+  // 兜底服务取不到图标时返回 404，因此无图标站点仍会回落首字母底图。
+  // 站点为 http 而页面为 https 时跳过直连，避开混合内容拦截。
   const iconChain = url => {
     let base = '';
     try { base = new URL(url).origin; } catch (e) {}
+    const host = hostOf(url);
     const list = [];
     const blockedByMixedContent = location.protocol === 'https:' && base.startsWith('http:');
     if (base && !blockedByMixedContent) {
-      list.push(`${base}/favicon.ico`, `${base}/apple-touch-icon.png`);
+      list.push(`${base}/favicon.ico`, `${base}/favicon.svg`, `${base}/apple-touch-icon.png`);
     }
+    if (host) list.push(`https://favicon.cccyun.cc/${host}`);
     return list;
   };
 
