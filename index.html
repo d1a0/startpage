@@ -175,7 +175,7 @@ body{
   font-size:clamp(26px,3.1vw,40px);font-weight:700;letter-spacing:.02em;
   color:hsl(var(--hue,220) 92% 90%);opacity:var(--mono-alpha);
   text-shadow:0 6px 22px hsl(var(--hue,220) 60% 4% / .5);
-  user-select:none;
+  user-select:none;transition:opacity .3s ease;
 }
 [data-theme="light"] .monogram{color:hsl(var(--hue,220) 62% 34%);text-shadow:none}
 .thumb-media{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
@@ -184,12 +184,14 @@ body{
   opacity:0;transition:opacity .45s ease;
 }
 .thumb-img.loaded{opacity:1}
-.thumb.mode-icon .thumb-img{width:auto;height:auto;max-width:52%;max-height:52%;object-fit:contain;opacity:1;
+.thumb.mode-icon .thumb-img{width:auto;height:auto;max-width:52%;max-height:52%;object-fit:contain;
   filter:drop-shadow(0 8px 18px rgba(0,0,0,.35))}
 [data-theme="light"] .thumb.mode-icon .thumb-img{filter:drop-shadow(0 6px 14px rgba(17,24,39,.18))}
 .thumb.mode-icon .thumb-media{background:radial-gradient(70% 70% at 50% 50%, rgba(255,255,255,.14), transparent 70%)}
 .thumb.mode-custom .thumb-img{object-fit:contain;padding:16px}
 .thumb.is-fallback .thumb-img{display:none}
+/* 图片真正加载成功后隐藏首字母，避免图标与首字母叠加显示 */
+.thumb.is-loaded .monogram{opacity:0}
 
 .thumb-actions{
   position:absolute;top:18px;right:18px;display:flex;gap:6px;z-index:3;
@@ -577,20 +579,18 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     ];
   };
 
-  // 图标降级链：站点自身 favicon 直连优先（由本机浏览器请求，内网服务同样可取到，
-  // 且不依赖任何第三方），再用国内可达的 favicon.im 兜底。
-  // 注意：icon.horse / Google / DuckDuckGo 等海外服务在国内网络下不可达，故不再使用。
-  // 站点为 http 而页面为 https 时跳过直连，避免被混合内容策略拦截。
+  // 图标降级链：只取站点自身的图标，不依赖任何第三方服务。
+  // icon.horse / Google / DuckDuckGo 等海外服务在国内网络下不可达；
+  // favicon.im 对取不到图标的站点会返回它自己的品牌 logo（产生误导），故不使用。
+  // 站点为 http 而页面为 https 时跳过直连，避开混合内容拦截；全部取不到时回落首字母底图。
   const iconChain = url => {
     let base = '';
     try { base = new URL(url).origin; } catch (e) {}
-    const host = hostOf(url);
     const list = [];
     const blockedByMixedContent = location.protocol === 'https:' && base.startsWith('http:');
     if (base && !blockedByMixedContent) {
       list.push(`${base}/favicon.ico`, `${base}/apple-touch-icon.png`);
     }
-    if (host) list.push(`https://favicon.im/${host}`);
     return list;
   };
 
@@ -700,7 +700,7 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     media.appendChild(img);
     thumb.append(bg, media);
 
-    const onLoad = () => img.classList.add('loaded');
+    const onLoad = () => { img.classList.add('loaded'); thumb.classList.add('is-loaded'); };
 
     if (mode === 'screenshot') {
       if (failedShots.has(site.id)) {
@@ -732,9 +732,9 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     return thumb;
   }
 
-  // 图标降级：直连 favicon.ico -> apple-touch-icon -> favicon.im -> 首字母底图
+  // 图标降级：直连 favicon.ico -> apple-touch-icon -> 首字母底图
   function useIcon(thumb, img, site, host) {
-    thumb.classList.remove('mode-screenshot', 'mode-custom', 'is-fallback');
+    thumb.classList.remove('mode-screenshot', 'mode-custom', 'is-fallback', 'is-loaded');
     thumb.classList.add('mode-icon');
     const chain = iconChain(site.url);
     let i = 0;
@@ -742,8 +742,13 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
       if (i >= chain.length) { thumb.classList.add('is-fallback'); return; }
       img.src = chain[i++];
     };
+    // 逐个尝试，只有真正加载成功才显示图片并隐藏首字母；
+    // 加载中或全部失败时保留首字母底图，避免图标与首字母叠加
+    img.addEventListener('load', () => {
+      img.classList.add('loaded');
+      thumb.classList.add('is-loaded');
+    }, { once: true });
     img.addEventListener('error', step);
-    img.classList.add('loaded');
     step();
   }
 
