@@ -98,7 +98,7 @@ body{
 .icon-btn.danger-ghost:hover{background:color-mix(in srgb,var(--danger) 14%,transparent);border-color:transparent}
 
 /* ---------- hero ---------- */
-.hero{text-align:center;padding:clamp(34px,7vh,86px) 0 26px}
+.hero{text-align:center;padding:44px 0 52px}
 .clock{
   font-size:clamp(48px,7.6vw,86px);line-height:1;font-weight:200;letter-spacing:-.035em;
   font-variant-numeric:tabular-nums;
@@ -112,7 +112,7 @@ body{
 .greet{color:var(--text);font-weight:600}
 
 /* ---------- search ---------- */
-.search{max-width:620px;width:100%;margin:0 auto 34px;position:relative}
+.search{max-width:620px;width:100%;margin:0 auto 22px;position:relative}
 .search svg.mag{position:absolute;left:18px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:var(--muted);pointer-events:none}
 .search input{
   width:100%;height:52px;padding:0 46px 0 48px;border-radius:999px;
@@ -134,7 +134,7 @@ body{
 /* ---------- grid ---------- */
 .grid{
   display:grid;gap:20px;
-  grid-template-columns:repeat(auto-fill,minmax(178px,1fr));
+  grid-template-columns:repeat(5,1fr);
   align-content:start;
 }
 .tile-wrap{position:relative;display:block}
@@ -230,9 +230,14 @@ body{
 .no-result.show{display:block}
 
 /* ---------- footer ---------- */
-.foot{margin-top:auto;padding-top:34px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap;
+.foot{margin-top:auto;padding-top:24px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap;
   color:var(--muted);font-size:12px}
 .foot kbd{font-family:inherit;border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11px;color:var(--text-soft)}
+
+/* 上下分区：上半区（时钟+搜索）贴顶收缩，卡片在下半区居中 */
+.center-area{flex:1;display:flex;flex-direction:column}
+.upper{display:flex;flex-direction:column}
+main{flex:1;display:flex;flex-direction:column;justify-content:center}
 
 /* ---------- modal ---------- */
 .overlay{
@@ -328,9 +333,15 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
 @keyframes toast-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .toast.out{opacity:0;transform:translateY(8px);transition:.3s ease}
 
+@media (max-width:1024px){
+  .grid{grid-template-columns:repeat(4,1fr)}
+}
+@media (max-width:768px){
+  .grid{grid-template-columns:repeat(3,1fr)}
+}
 @media (max-width:600px){
   .shell{padding:16px 16px 34px}
-  .grid{grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:14px}
+  .grid{grid-template-columns:repeat(2,1fr);gap:14px}
   .top-actions .label{display:none}
 }
 @media (prefers-reduced-motion:reduce){
@@ -355,6 +366,8 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     </div>
   </header>
 
+  <div class="center-area">
+  <div class="upper">
   <section class="hero">
     <div class="clock" id="clock">--:--</div>
     <div class="hero-sub">
@@ -372,6 +385,7 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
   </div>
+  </div>
 
   <main>
     <section class="grid" id="grid"></section>
@@ -382,6 +396,7 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
       <button class="btn primary" id="emptyAdd">添加第一个网站</button>
     </div>
   </main>
+  </div>
 
   <footer class="foot">
     <span>拖拽卡片可调整顺序</span>
@@ -480,8 +495,6 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
   const KEY_THEME = 'startpage:v1:theme';
   const BING_SEARCH = 'https://cn.bing.com/search?q=';
   const SHOT_W = 800, SHOT_H = 500;
-  const SHOT_RETRY_MAX = 4;          // 截图生成中时的重试次数
-  const SHOT_RETRY_DELAY = 6000;     // 重试间隔(ms)
   const TITLE_TIMEOUT = 6500;
 
   const SEED = [
@@ -555,8 +568,17 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     return h;
   }
 
-  const shotUrl = (url, bust) =>
-    `https://s0.wp.com/mshots/v1/${encodeURIComponent(url)}?w=${SHOT_W}&h=${SHOT_H}` + (bust ? `&_=${bust}` : '');
+  // 截图源三级链：thum.io（快、支持非标端口）-> microlink -> mShots，任一级失败自动切换
+  // bust 非 0 时在各级请求上附加参数，强制绕过缓存
+  const shotSources = (url, bust) => {
+    const sep = url.includes('?') ? '&' : '?';
+    const b = bust ? sep + '_=' + bust : '';
+    return [
+      `https://image.thum.io/get/width/${SHOT_W}/crop/${SHOT_H}/noanimate/${url}${b}`,
+      `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url${bust ? `&_b=${bust}` : ''}`,
+      `https://s0.wp.com/mshots/v1/${encodeURIComponent(url)}?w=${SHOT_W}&h=${SHOT_H}${bust ? `&_=${bust}` : ''}`
+    ];
+  };
 
   const iconChain = host => [
     `https://icon.horse/icon/${host}`,
@@ -619,9 +641,8 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
 
   /* ============ 状态 ============ */
   let sites = [];
-  const failedShots = new Set();   // 本次会话中截图失败的站点
-  const shotTries = new Map();     // id -> 已重试次数
-  const shotPending = new Map();   // id -> 待执行的截图刷新定时器
+  const failedShots = new Set();   // 本次会话中截图链全部失败的站点
+  const shotBust = new Map();      // id -> 「刷新缩略图」时间戳，用于绕过浏览器缓存
   let query = '';
 
   function load() {
@@ -652,8 +673,7 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
   }
 
   /* ============ 缩略图渲染 ============ */
-  function buildThumb(site, opts) {
-    const preview = !!(opts && opts.preview);
+  function buildThumb(site) {
     const host = hostOf(site.url);
     const mode = site.thumb.mode;
     const thumb = el('div', 'thumb mode-' + mode);
@@ -678,13 +698,19 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
       if (failedShots.has(site.id)) {
         useIcon(thumb, img, site, host);
       } else {
+        const srcs = shotSources(site.url, shotBust.get(site.id) || '');
+        let si = 0;
         img.addEventListener('load', onLoad, { once: true });
         img.addEventListener('error', () => {
-          failedShots.add(site.id);
-          useIcon(thumb, img, site, host);
-        }, { once: true });
-        img.src = shotUrl(site.url, '');
-        if (!preview) scheduleShotRetry(site, img);
+          si++;
+          if (si < srcs.length) {
+            img.src = srcs[si];          // 换下一个截图源
+          } else {
+            failedShots.add(site.id);    // 全部失败，降级到图标
+            useIcon(thumb, img, site, host);
+          }
+        });
+        img.src = srcs[0];
       }
     } else if (mode === 'icon') {
       useIcon(thumb, img, site, host);
@@ -700,7 +726,6 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
 
   // 图标三级降级：icon.horse -> Google -> DuckDuckGo -> 首字母底图
   function useIcon(thumb, img, site, host) {
-    cancelShotRetry(site.id);
     thumb.classList.remove('mode-screenshot', 'mode-custom', 'is-fallback');
     thumb.classList.add('mode-icon');
     const chain = iconChain(host);
@@ -714,33 +739,17 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     step();
   }
 
-  // mShots 首次请求通常只返回「生成中」占位图，隔几秒带缓存参数重取
-  function scheduleShotRetry(site, img) {
-    const tries = shotTries.get(site.id) || 0;
-    if (tries >= SHOT_RETRY_MAX) return;
-    const pending = shotPending.get(site.id);
-    if (pending) { pending.img = img; return; }      // 已有定时器，只更新目标元素
-    const rec = { img, timer: 0 };
-    rec.timer = setTimeout(() => {
-      shotPending.delete(site.id);
-      shotTries.set(site.id, tries + 1);
-      if (document.visibilityState !== 'visible') return;
-      if (!rec.img.isConnected || failedShots.has(site.id)) return;
-      rec.img.src = shotUrl(site.url, Date.now());
-    }, SHOT_RETRY_DELAY);
-    shotPending.set(site.id, rec);
-  }
-
-  function cancelShotRetry(id) {
-    const rec = shotPending.get(id);
-    if (rec) { clearTimeout(rec.timer); shotPending.delete(id); }
-  }
-
   /* ============ 渲染 ============ */
   const grid = $('#grid');
 
+  const tileCache = new Map();   // id -> { wrap, tile, nameEl, hostEl, sig }
+  let addBtn = null;
+
+  // 缩略图重建签名：仅当相关数据变化时才替换缩略图节点，避免无关卡片图片重新加载
+  const thumbSig = site =>
+    [site.thumb.mode, site.thumb.src || '', hostOf(site.url), shotBust.get(site.id) || ''].join('|');
+
   function render() {
-    grid.textContent = '';
     const q = query.trim().toLowerCase();
     let visible = 0;
 
@@ -750,37 +759,63 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
       const matched = !q || haystack.includes(q);
       if (matched) visible++;
 
-      const wrap = el('div', 'tile-wrap');
-      wrap.dataset.id = site.id;
-      if (!matched) wrap.classList.add('hidden');
+      let entry = tileCache.get(site.id);
+      if (!entry) {
+        const wrap = el('div', 'tile-wrap');
+        wrap.dataset.id = site.id;
 
-      const tile = el('a', 'tile');
-      tile.href = site.url;
-      tile.target = '_blank';
-      tile.rel = 'noopener noreferrer';
-      tile.draggable = true;
-      tile.title = site.name + '\n' + site.url;
-      tile.appendChild(buildThumb(site));
+        const tile = el('a', 'tile');
+        tile.target = '_blank';
+        tile.rel = 'noopener noreferrer';
+        tile.draggable = true;
+        tile.appendChild(buildThumb(site));
 
-      const meta = el('div', 'tile-meta');
-      meta.append(el('div', 'tile-name', site.name), el('div', 'tile-host', host));
-      tile.appendChild(meta);
+        const meta = el('div', 'tile-meta');
+        const nameEl = el('div', 'tile-name', site.name);
+        const hostEl = el('div', 'tile-host', host);
+        meta.append(nameEl, hostEl);
+        tile.appendChild(meta);
 
-      const actions = el('div', 'thumb-actions');
-      actions.append(
-        miniBtn('编辑', 'edit', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>', () => openModal(site)),
-        miniBtn('删除', 'del', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>', () => askDelete(site))
-      );
+        const actions = el('div', 'thumb-actions');
+        actions.append(
+          miniBtn('编辑', 'edit', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>', () => openModal(site)),
+          miniBtn('删除', 'del', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>', () => askDelete(site))
+        );
 
-      wrap.append(tile, actions);
-      grid.appendChild(wrap);
+        wrap.append(tile, actions);
+        entry = { wrap, tile, nameEl, hostEl, sig: '' };
+        tileCache.set(site.id, entry);
+      }
+
+      // 就地更新：重新挂载已有节点不会触发图片重新请求
+      entry.tile.href = site.url;
+      const title = site.name + '\n' + site.url;
+      if (entry.tile.title !== title) entry.tile.title = title;
+      if (entry.nameEl.textContent !== site.name) entry.nameEl.textContent = site.name;
+      if (entry.hostEl.textContent !== host) entry.hostEl.textContent = host;
+
+      const sig = thumbSig(site);
+      if (entry.sig !== sig) {
+        entry.sig = sig;
+        entry.wrap.querySelector('.thumb').replaceWith(buildThumb(site));
+      }
+
+      entry.wrap.classList.toggle('hidden', !matched);
+      grid.appendChild(entry.wrap);   // 按新顺序重新挂载即完成排序
     });
 
-    const add = el('button', 'add-tile');
-    add.type = 'button';
-    add.innerHTML = '<span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span>添加网站</span>';
-    add.addEventListener('click', () => openModal(null));
-    grid.appendChild(add);
+    // 清理已删除卡片的缓存节点
+    for (const [id, entry] of Array.from(tileCache)) {
+      if (!sites.some(s => s.id === id)) { entry.wrap.remove(); tileCache.delete(id); }
+    }
+
+    if (!addBtn) {
+      addBtn = el('button', 'add-tile');
+      addBtn.type = 'button';
+      addBtn.innerHTML = '<span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span>添加网站</span>';
+      addBtn.addEventListener('click', () => openModal(null));
+    }
+    grid.appendChild(addBtn);
 
     $('#empty').classList.toggle('show', sites.length === 0);
     $('#noResult').classList.toggle('show', sites.length > 0 && visible === 0);
@@ -856,10 +891,9 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
   function moveSite(id, to) {
     const from = sites.findIndex(s => s.id === id);
     if (from < 0) return;
-    let target = to;
-    if (from < target) target -= 1;
+    // to 是"移除被拖卡片之后"的插入槽位（insertionIndex 已在被拖卡片以外的卡片中计算），直接使用
     const [item] = sites.splice(from, 1);
-    target = Math.max(0, Math.min(sites.length, target));
+    const target = Math.max(0, Math.min(sites.length, to));
     sites.splice(target, 0, item);
     save();
     render();
@@ -979,7 +1013,7 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
       previewMeta.textContent = '—';
       return;
     }
-    previewBox.appendChild(buildThumb(draft, { preview: true }));
+    previewBox.appendChild(buildThumb(draft));
     previewMeta.textContent = draft.name + ' · ' + hostOf(draft.url);
   }
 
@@ -1001,8 +1035,7 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     // 每次打开都重新给截图一次机会
     const key = editing ? editing.id : 'draft';
     failedShots.delete(key);
-    shotTries.delete(key);
-    cancelShotRetry(key);
+    shotBust.delete(key);
 
     if (site) {
       $('#modalTitle').textContent = '编辑网站';
@@ -1087,8 +1120,10 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
     const url = normalizeUrl(fUrl.value);
     if (!url) { setStatus('请先填写正确的网址', 'err'); return; }
     if (draftMode === 'screenshot') {
-      failedShots.delete(editing ? editing.id : 'draft');
-      shotTries.delete(editing ? editing.id : 'draft');
+      const key = editing ? editing.id : 'draft';
+      failedShots.delete(key);
+      shotBust.set(key, Date.now());   // 附加时间戳绕过缓存，强制重新截图
+      render();                         // 差量渲染，只会重建当前这张卡片
     }
     setStatus('已重新加载缩略图', 'ok');
     renderPreview();
@@ -1117,10 +1152,9 @@ input[type=text]:focus,input[type=url]:focus{border-color:color-mix(in srgb,var(
       sites.push(target);
     }
 
-    // 地址或缩略图设置变了，给截图一次重新生成的机会
-    cancelShotRetry(target.id);
-    shotTries.delete(target.id);
+    // 地址或缩略图设置变了，给截图链一次重新生成的机会（不附加 bust，未变更的图走缓存）
     failedShots.delete(target.id);
+    shotBust.delete(target.id);
 
     save();
     render();
